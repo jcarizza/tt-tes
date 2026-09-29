@@ -3,9 +3,9 @@ import logging
 import time
 
 from datetime import datetime
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import litellm
 from litellm import completion
@@ -22,9 +22,10 @@ INTENTS = 5
 
 app = FastAPI()
 
-class Events(str, Enum):
+
+class EnumEvents(str, Enum):
     PR_OPENED = 'pr_opened'
-    PR_MERGED = 'pr_opened'
+    PR_MERGED = 'pr_merged'
     PR_DEPLOYMENT = 'deployment'
     PR_INCIDENT = 'incident'
 
@@ -33,12 +34,12 @@ class LLMResponseParsingError(Exception):
     pass
 
 
-class MainModel(BaseModel):
+class Events(BaseModel):
     """
     Validate team insight input for insight endpoint
     """
-    _type: Events
-    id: str
+    type_: EnumEvents = Field(alias="type")
+    id: str | None = None
     timestamp: datetime
 
 
@@ -156,11 +157,11 @@ def generate_team_insight(team_id, events, llm_client):
     incidents_count = 0
     deployments_count = 0
     for event in events:
-        event_type = event.get("type")
+        event_type = event.type_
         if event_type == EVENT_PR_MERGED:
-            closed[event['id']] = datetime.fromisoformat(event['timestamp'])
+            closed[event.id] = event.timestamp
         if event_type  == EVENT_PR_OPENED:
-            opened[event['id']] = datetime.fromisoformat(event['timestamp'])
+            opened[event.id] = event.timestamp
         if event_type == EVENT_INCIDENT:
             incidents_count += 1
         if event_type == EVENT_DEPLOYMENT:
@@ -191,8 +192,7 @@ def generate_team_insight(team_id, events, llm_client):
     attempt = 0
     for intent in range(INTENTS):
         try:
-            print(prompt)
-            llm_client.complete(prompt, timeout)
+            return llm_client.complete(prompt, timeout)
             break
         except Exception as e:
             logger.error("LLM response error intent=%s", intent)
@@ -205,48 +205,52 @@ def generate_team_insight(team_id, events, llm_client):
 
 
 
+llm_client = LLMCustomClient()
 
 
-@app.get("/insights")
-def generate_insight():
-    return generate_team_insights(events)
+@app.post("/insights/{team_id}")
+def generate_insight(team_id: str, events: list[Events] = Body(embed=True)):
+    return generate_team_insight(team_id, events, llm_client)
 
 
-if __name__ == "__main__":
-    pass
 
-    team_id = "platform"
-    events = [
-        {
-            "type": "pr_opened",
-            "id": "pr-2",
-            "timestamp": "2026-01-01T09:00:00Z"
-        },
-        {
-            "type": "pr_merged",
-            "id": "pr-2",
-            "timestamp": "2026-01-02T19:00:00Z"
-        },
-        {
-            "type": "pr_opened",
-            "id": "pr-1",
-            "timestamp": "2026-01-01T09:00:00Z"
-        },
-        {
-            "type": "pr_merged",
-            "id": "pr-1",
-            "timestamp": "2026-01-02T12:00:00Z"
-        },
-        {
-            "type": "deployment",
-            "timestamp": "2026-01-03T12:00:00Z"
-        },
-        {
-            "type": "incident",
-            "timestamp": "2026-01-04T12:00:00Z"
-        }
-    ]
-    llm_client = LLMCustomClient()
-    generate_team_insight(team_id, events, llm_client)
 
-    #app.run()
+
+#if __name__ == "__main__":
+#    pass
+#
+#    team_id = "platform"
+#    events = [
+#        {
+#            "type": "pr_opened",
+#            "id": "pr-2",
+#            "timestamp": "2026-01-01T09:00:00Z"
+#        },
+#        {
+#            "type": "pr_merged",
+#            "id": "pr-2",
+#            "timestamp": "2026-01-02T19:00:00Z"
+#        },
+#        {
+#            "type": "pr_opened",
+#            "id": "pr-1",
+#            "timestamp": "2026-01-01T09:00:00Z"
+#        },
+#        {
+#            "type": "pr_merged",
+#            "id": "pr-1",
+#            "timestamp": "2026-01-02T12:00:00Z"
+#        },
+#        {
+#            "type": "deployment",
+#            "timestamp": "2026-01-03T12:00:00Z"
+#        },
+#        {
+#            "type": "incident",
+#            "timestamp": "2026-01-04T12:00:00Z"
+#        }
+#    ]
+#    llm_client = LLMCustomClient()
+#    generate_team_insight(team_id, events, llm_client)
+#
+#    #app.run()
