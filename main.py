@@ -59,8 +59,8 @@ def generate_team_insight(team_id, events, llm_client):
     closed = {}
     opened = {}
     deltas = []
-    incidents = 0
-    deployments = 0
+    incidents_count = 0
+    deployments_count = 0
     for event in events:
         event_type = event.get("type")
         if event_type == EVENT_PR_MERGED:
@@ -68,28 +68,30 @@ def generate_team_insight(team_id, events, llm_client):
         if event_type  == EVENT_PR_OPENED:
             opened[event['id']] = datetime.fromisoformat(event['timestamp'])
         if event_type == EVENT_INCIDENT:
-            incidents += 1
+            incidents_count += 1
         if event_type == EVENT_DEPLOYMENT:
-            incidents += 1
+            deployments_count += 1
 
     deltas = []
+    merged_count = 0
     for k, v in closed.items():
-        print(closed[k])
-        print(opened[k])
-        deltas.append(
-            (
-                float(closed[k].strftime("%s")) - float(opened[k].strftime("%s"))
-            ) / 3600 # to hours
-        )
-
-    print(deltas)
-
-
-
-        
+        try:
+            deltas.append(
+                (
+                    float(closed[k].strftime("%s")) - float(opened[k].strftime("%s"))
+                ) / 3600 # to hours
+            )
+            merged_count += 1
+        except KeyError:
+            pass
 
     timeout = 30
-    insights = ""
+    insights = {
+        "merged_prs": merged_count,
+        "average_pr_cycle_time_hours": sum(deltas) / len(deltas),
+        "incidents": incidents_count,
+        "deployments": deployments_count,
+    }
     return llm_client.complete(insights, timeout)
 
 
@@ -107,6 +109,16 @@ if __name__ == "__main__":
 
     team_id = "platform"
     events = [
+        {
+            "type": "pr_opened",
+            "id": "pr-2",
+            "timestamp": "2026-01-01T09:00:00Z"
+        },
+        {
+            "type": "pr_merged",
+            "id": "pr-2",
+            "timestamp": "2026-01-02T19:00:00Z"
+        },
         {
             "type": "pr_opened",
             "id": "pr-1",
