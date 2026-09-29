@@ -1,14 +1,17 @@
 import json
 import logging
 import time
+import functools
+
 
 from datetime import datetime
-from fastapi import FastAPI, Body
 from enum import Enum
-from pydantic import BaseModel, Field
+
 
 import litellm
 from litellm import completion
+from pydantic import BaseModel, Field
+from fastapi import FastAPI, Body
 
 logger = logging.getLogger()
 
@@ -45,8 +48,12 @@ class Events(BaseModel):
 
 class LLMCustomClient:
 
+    @functools.cache
     def complete(self, prompt, timeout_seconds):
-        """This should complete the prompt call to LLM"""
+        """This should complete the prompt call to LLM
+        TODO:
+          - cache only work for 1 vps if want shared cache use redis
+        """
 
         instructions = (
                 """
@@ -210,6 +217,12 @@ llm_client = LLMCustomClient()
 
 @app.post("/insights/{team_id}")
 def generate_insight(team_id: str, events: list[Events] = Body(embed=True)):
+    """Generate team insight based on input date.
+
+    TODO:
+      - Protect endpoint with auth dependency
+      - Limite requests per second
+    """
     return generate_team_insight(team_id, events, llm_client)
 
 
